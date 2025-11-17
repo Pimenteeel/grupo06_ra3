@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <sys/types.h>
 
-#define MAX_PATH 1024 
+#define MAX_PATH 1024 // Tamanho máximo para caminhos de arquivo
 
 // Funções auxiliares (agora públicas para o main.c)
 bool write_to_file(const char* filepath, const char* value);

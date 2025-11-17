@@ -6,6 +6,8 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <time.h>
+
+// Função utilitária para escrever em arquivos do cgroup
 bool write_to_file(const char* filepath, const char* value) {
     FILE* file = fopen(filepath, "w");
     if (!file) {
@@ -23,6 +25,7 @@ bool write_to_file(const char* filepath, const char* value) {
     return true;
 }
 
+// Lê unsigned long long de arquivos do cgroup
 unsigned long long read_from_file_ull(const char* filepath) {
     FILE* file = fopen(filepath, "r");
     if (!file) {
@@ -41,6 +44,7 @@ unsigned long long read_from_file_ull(const char* filepath) {
     return value;
 }
 
+// Lê long de arquivos do cgroup
 long read_from_file_long(const char* filepath) {
     FILE* file = fopen(filepath, "r");
     if (!file) {
@@ -59,7 +63,7 @@ long read_from_file_long(const char* filepath) {
     return value;
 }
 
-
+// Coleta métricas do cgroup - útil para monitoramento
 bool coletar_metricas_cgroup(const char* cgroup_path) {
     printf("COLETANDO METRICAS DO CGROUP: %s\n", cgroup_path);
     
@@ -76,7 +80,7 @@ bool coletar_metricas_cgroup(const char* cgroup_path) {
     // Ler métricas reais dos arquivos
     char metric_path[MAX_PATH];
     
-    // CPU usage (cgroups v2)
+    // CPU usage (cgroups v2) - parsing do cpu.stat
     snprintf(metric_path, sizeof(metric_path), "%s/cpu.stat", cgroup_path);
     FILE* cpu_file = fopen(metric_path, "r");
     unsigned long long cpu_usage = 0;
@@ -108,7 +112,7 @@ bool coletar_metricas_cgroup(const char* cgroup_path) {
         printf("Limite de Memoria           | %.1f MB\n", (double)memory_limit / (1024 * 1024));
     }
     
-    // Memory fail count (cgroups v2)
+    // Memory fail count (cgroups v2) - conta OOM kills
     snprintf(metric_path, sizeof(metric_path), "%s/memory.events", cgroup_path);
     FILE* mem_events = fopen(metric_path, "r");
     long memory_failcnt = 0;
@@ -125,7 +129,7 @@ bool coletar_metricas_cgroup(const char* cgroup_path) {
         printf("Falhas de Memoria (OOM)     | 0\n");
     }
     
-    // PIDs current (cgroups v2)
+    // PIDs current (cgroups v2) - conta processos no cgroup
     snprintf(metric_path, sizeof(metric_path), "%s/cgroup.procs", cgroup_path);
     FILE* procs_file = fopen(metric_path, "r");
     long pids_current = 0;
@@ -145,7 +149,7 @@ bool coletar_metricas_cgroup(const char* cgroup_path) {
     return true;
 }
 
-
+// Cria e configura cgroup com limites de CPU e memória
 bool criar_configurar_cgroup(const char* controller, const char* name, double cpu_cores, long memoria_mb) {
     char cgroup_path[MAX_PATH];
     // CGROUPS V2: tudo na mesma pasta
@@ -185,6 +189,7 @@ bool criar_configurar_cgroup(const char* controller, const char* name, double cp
         printf("CPU configurado: max=%ldus, period=100000us\n", quota_us);
     }
     
+    // Configurar limite de memória se especificado
     if (memoria_mb > 0) {
     long memoria_bytes = memoria_mb * 1024 * 1024;
     
@@ -212,8 +217,7 @@ bool criar_configurar_cgroup(const char* controller, const char* name, double cp
     return true;
 }
 
-
-
+// Move processo para o cgroup especificado
 bool move_process_to_cgroup(const char* cgroup_path, int pid) {
     char filepath[MAX_PATH];
     
@@ -235,7 +239,7 @@ bool move_process_to_cgroup(const char* cgroup_path, int pid) {
     return true;
 }
 
-
+// Gera relatório CSV com métricas de utilização
 void gerar_relatorio_utilizacao(const char* cgroup_path) {
     printf("GERANDO RELATORIO DE UTILIZACAO: %s\n", cgroup_path);
     
@@ -266,7 +270,7 @@ void gerar_relatorio_utilizacao(const char* cgroup_path) {
     }
     fprintf(relatorio, "%ld,cpu_usage,%llu,0,0\n", now, cpu_usage);
     
-    // Memory (cgroups v2)
+    // Memory (cgroups v2) - calcula utilização percentual
     snprintf(metric_path, sizeof(metric_path), "%s/memory.current", cgroup_path);
     long memory_usage = read_from_file_long(metric_path);
     snprintf(metric_path, sizeof(metric_path), "%s/memory.max", cgroup_path);
@@ -279,6 +283,7 @@ void gerar_relatorio_utilizacao(const char* cgroup_path) {
     printf("Relatorio gerado: cgroup_report.csv\n");
 }
 
+// Esvazia e deleta cgroup - limpeza
 bool empty_and_delete_cgroup(const char* cgroup_path) {
     char procs_path[MAX_PATH];
     snprintf(procs_path, sizeof(procs_path), "%s/cgroup.procs", cgroup_path);
@@ -288,7 +293,7 @@ bool empty_and_delete_cgroup(const char* cgroup_path) {
         return false;
     }
     
-    sleep(1);
+    sleep(1); // dar tempo para o kernel processar
     
     if (rmdir(cgroup_path) != 0) {
         fprintf(stderr, "Erro ao deletar cgroup %s: %s\n", cgroup_path, strerror(errno));
