@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <title>Dashboard com métricas</title>
 
+    <!-- Importa Chart.js para gráficos -->
     <script src = "https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
@@ -29,36 +30,40 @@
 <body>
 
     <div class="container">
-
+        <!-- Gráfico de CPU -->
         <div class="grafico">
             <h2>Uso de CPU (%)</h2>
             <canvas id="cpuChart"></canvas>
         </div>
 
+        <!-- Gráfico de Memória -->
         <div class="grafico">
             <h2>Memória (RSS em Mb)</h2>
             <canvas id="memChart"></canvas>
         </div>
 
+        <!-- Gráfico de I/O -->
         <div class="grafico">
             <h2>I/O de Disco (Mb/s)</h2>
             <canvas id="ioChart"></canvas>
         </div>
 
+        <!-- Gráfico de Rede -->
         <div class="grafico">
             <h2>Rede (Mb/s)</h2>
             <canvas id="netChart"></canvas>
         </div>
-
     </div>
 
     <script>
+        // Função para carregar dados da API
         async function carregarDados() {
             const resp = await fetch("/api/dados");
             const dados = await resp.json();
 
             if (dados.length == 0) return;
 
+            // Prepara dados para os gráficos
             const labels = dados.map((_, index) => index + 1);
             const cpu = dados.map(l => l.cpu_percent);
             const rss = dados.map(l => l.rss_mb / (1024 * 1024));
@@ -67,6 +72,7 @@
             const netRx = dados.map(l => l.net_rx_rate_mbs ?? 0);
             const netTx = dados.map(l => l.net_tx_rate_mbs ?? 0);
 
+            // Atualiza gráficos com novos dados
             cpuChart.data.labels = labels;
             cpuChart.data.datasets[0].data = cpu;
             cpuChart.update();
@@ -86,6 +92,7 @@
             netChart.update();
         }
 
+        // Configuração do gráfico de CPU
         const cpuChart = new Chart(document.getElementById("cpuChart"), {
             type: "line",
             data: {
@@ -101,6 +108,7 @@
             }
         });
 
+        // Configuração do gráfico de Memória
         const memChart = new Chart(document.getElementById("memChart"), {
             type: "line",
             data: {
@@ -116,6 +124,7 @@
             }
         });
 
+        // Configuração do gráfico de I/O (Leitura e Escrita)
         const ioChart = new Chart(document.getElementById("ioChart"), {
             type: "line",
             data: {
@@ -136,6 +145,7 @@
             }
         });
 
+        // Configuração do gráfico de Rede (Download e Upload)
         const netChart = new Chart(document.getElementById("netChart"), {
             type: "line",
             data: {
@@ -156,8 +166,9 @@
             }
         });
 
+        // Atualiza dados a cada 5 segundos
         setInterval(carregarDados, 5000);
-        carregarDados();
+        carregarDados(); // Carrega dados inicialmente
     </script>
 </body>
 </html>
