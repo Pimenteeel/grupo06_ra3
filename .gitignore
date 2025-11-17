@@ -416,3 +416,13 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+/.vscode
+*.o
+*.csv
+/venv
+*.dat
+test_cpu
+test_memory
+test_io
+resource-monitor
+resource-monitor
