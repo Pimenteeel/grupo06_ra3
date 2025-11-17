@@ -283,7 +283,6 @@ void gerar_relatorio_utilizacao(const char* cgroup_path) {
     printf("Relatorio gerado: cgroup_report.csv\n");
 }
 
-// Esvazia e deleta cgroup - limpeza
 bool empty_and_delete_cgroup(const char* cgroup_path) {
     char procs_path[MAX_PATH];
     snprintf(procs_path, sizeof(procs_path), "%s/cgroup.procs", cgroup_path);
@@ -292,9 +291,7 @@ bool empty_and_delete_cgroup(const char* cgroup_path) {
         fprintf(stderr, "Erro ao esvaziar cgroup %s\n", cgroup_path);
         return false;
     }
-    
-    sleep(1); // dar tempo para o kernel processar
-    
+    sleep(1); 
     if (rmdir(cgroup_path) != 0) {
         fprintf(stderr, "Erro ao deletar cgroup %s: %s\n", cgroup_path, strerror(errno));
         return false;
