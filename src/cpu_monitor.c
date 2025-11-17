@@ -50,3 +50,84 @@ int metricas_switches(int pid, CpuMetrics *cpu){
 
     return 0;
 }
+
+int metricas_CPU(int pid, CpuMetrics *cpu){
+    char proc_path[256]; // variável para guardar caminho do /proc
+    FILE *fp; // ponteiro para abrir o proc_path para leitura
+
+    sprintf(proc_path, "/proc/%d/stat", pid); // função para formatar o proc_path
+    fp = fopen(proc_path, "r"); // abrir caminho do proc para leitura
+
+    if(fp == NULL){ // se o ponteiro for nulo, retorna -1 (insucesso)
+        perror("Erro ao abrir o processo");
+        return -1;
+    }
+
+    char buffer[4096]; // variavel ve buffer para guardar informacoes do fopen
+    if (fgets(buffer, sizeof(buffer), fp) == NULL) /// se o conteudo do fp que esta armazenando no buffer for vazio, erro
+    {
+        printf("Erro ao ler dados do arquivo %s", proc_path);
+        fclose(fp);
+        return -1;
+    }
+
+    fclose(fp);
+
+    char *token; //Para percorrer o buffer
+    int contagem = 1; // contagem de acordo com o número de tokens
+    cpu -> user_time = 0; // inicialização da variável que vem da struct
+    cpu -> system_time = 0; // inicialização da variável que vem da struct
+    cpu -> threads = 0; // inicialização da variável que vem da struct
+
+    token = strtok(buffer, " "); // quebra os espaços do /proc/pid/status e tokeniza as variáveis
+
+    while (token != NULL && contagem <= 20){ // enquanto o token nao for nulo e a contagem for menor que 20
+        switch (contagem)
+        {
+        case 14: // se o token for 14
+            cpu -> user_time = atol(token); // armazena o ascii para o long (user time)
+            break;
+        case 15: // se o token for 15
+            cpu -> system_time = atol(token); // armazena o ascii para o long (system time)
+            break;
+        case 20: // se o token for 20
+            cpu -> threads = atol(token); // armazena o ascii para o long (threads)
+            break;
+        }
+        token = strtok(NULL, " "); // coloca as variáveis lidas com um NULL no lugar do espaço para continuar a tokenizacao
+        contagem++;
+    }
+
+    return 0;
+}
+
+long total_ticks_sistema() {
+    FILE *fp;
+    fp = fopen("/proc/stat", "r");
+
+    if (fp == NULL){
+        perror("Erro ao abrir o processo");
+        return -1;
+    }
+
+    char buffer[4096];
+    if(fgets(buffer, sizeof(buffer), fp) == NULL){
+        fclose(fp);
+        return -1;
+    }
+    fclose(fp);
+
+    char *token = strtok(buffer, " ");
+    long total_ticks = 0;
+    int i = 0;
+
+    while((token = strtok(NULL, " ")) != NULL){
+        if (i >= 7){
+            break;
+        }
+        total_ticks = total_ticks + atol(token);
+        i++;
+    }
+
+    return total_ticks;
+}
