@@ -1,5 +1,5 @@
 #define _GNU_SOURCE
-#include <stdio.h>
+#include <stdio.h> 
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -8,27 +8,32 @@
 #include "namespace.h"
 #include "cgroup.h"
 
-#define INTERVALO 1
+#define INTERVALO 1 //Intervalo padrão para atualização de métricas em s
 
 void monitor_process(int pid) {
 
+    //Estrutura de armazenamento de métricas
     CpuMetrics dados_CPU;
     MemMetrics dados_MEM;
     IoMetrics dados_IO;
     RedeMetrics dados_REDE;
 
+    //Estrutura auxiliar para cálculos de taxas
     CpuMetrics dados_CPU_ante;
     IoMetrics dados_IO_ante;
     RedeMetrics dados_REDE_ante;
     long ticks_sistema_ante;
 
+    //Tenta abrir arquivo para regristrar em CSV
     FILE* log_file = fopen("Resource_Monitor.csv", "w");
     if (log_file == NULL) {
         perror("Não foi possível criar o arquivo de log .csv");
         return;
     }
+    //Cabeçalho do CSV
     fprintf(log_file, "timestamp,pid,cpu_percent,rss_mb,vsz_mb,swap_mb,total_page_faults,io_read_rate_mbs,io_write_rate_mbs,net_rx_rate_mbs,net_tx_rate_mbs\n");
 
+    //Coleta valores iniciais antes do loop
     metricas_CPU(pid, &dados_CPU_ante);
     metricas_IO(pid, &dados_IO_ante);
     metricas_REDE(pid, &dados_REDE_ante);
@@ -38,8 +43,8 @@ void monitor_process(int pid) {
 
     while (1) {
 
-        system("clear");
-
+        system("clear");//Limpa a tela a cada ciclo
+        //Pesquisar******************************
         if (metricas_CPU(pid, &dados_CPU) != 0) {
             fprintf(stderr, "Não foi possível ler metricas de CPU para o PID %d\n", pid);
             return;
@@ -97,14 +102,17 @@ void monitor_process(int pid) {
         printf("Pacotes recebidos..........: %ld Pacotes\n", dados_REDE.packets_rx);
         printf("Pacotes transmitidos.......: %ld Pacotes\n", dados_REDE.packets_tx);
 
+        //Calcula diferença de tempo entre os ciclos
         long delta_proc = (dados_CPU.user_time + dados_CPU.system_time) - (dados_CPU_ante.user_time + dados_CPU_ante.system_time);
         long delta_sistema = ticks_sistema_agora - ticks_sistema_ante;
 
+        //Calcula % do uso da CPU
         double cpu_percent = 0.0;
         if (delta_sistema > 0) {
             cpu_percent = 100.0 * (double)delta_proc / (double)delta_sistema;
         }
 
+        //Calcula deltas de leitura e escrita em disco, rede e exibe no terminal
         long delta_read = dados_IO.read_bytes - dados_IO_ante.read_bytes;
         long delta_write = dados_IO.write_bytes - dados_IO_ante.write_bytes;
 
@@ -124,6 +132,7 @@ void monitor_process(int pid) {
         printf("Taxa de Rede (RX).......: %.2f MB/s\n", taxa_rede_rx_mbs);
         printf("Taxa de Rede (TX).......: %.2f MB/s\n", taxa_rede_tx_mbs);
 
+		//Grava as métricas no arquivo CSV
         fprintf(log_file, "%ld,%d,%.2f,%.2f,%.2f,%.2f,%ld,%.2f,%.2f,%.2f,%.2f\n",
             (long)time(NULL),
             pid,
@@ -137,8 +146,9 @@ void monitor_process(int pid) {
             taxa_rede_rx_mbs,
             taxa_rede_tx_mbs
         );
-        fflush(log_file);
+        fflush(log_file); //Garante gração imediata
 
+		//Atualiza valores "anteriores" para o próximo ciclo
         dados_CPU_ante = dados_CPU;
         dados_IO_ante = dados_IO;
         dados_REDE_ante = dados_REDE;
@@ -376,4 +386,135 @@ void experimento_limite_memoria(void) {
     }
     sleep(1);
     rmdir(cgroup_path);
+}
+
+int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        fprintf(stderr, "Uso: %s <flag> <PID> [PID]\n", argv[0]);
+        fprintf(stderr, "Flags:\n");
+        fprintf(stderr, " -r Monitorar Recursos (loop)\n");
+        fprintf(stderr, " -n Listar Namespaces\n");
+        fprintf(stderr, " -c <PID1> <PID2> Comparar Namespaces\n");
+        fprintf(stderr, " -m Mapear todos os processos\n");
+        fprintf(stderr, " -o Medir overhead de Namespaces\n");
+        fprintf(stderr, " -g Funções relacionadas a CGroup\n");
+        return 1;
+    }
+
+    char* flag = argv[1];
+
+    if (strcmp(flag, "-r") == 0 || strcmp(flag, "-n") == 0) {
+
+        if (argc != 3) {
+            fprintf(stderr, "Erro: As flags -r e -n exigem exatamente 1 PID\n");
+            return 1;
+        }
+
+        int pid = atoi(argv[2]);
+        if (pid <= 0) {
+            fprintf(stderr, "PID inválido: %s\n", argv[2]);
+            return 1;
+        }
+
+        if (strcmp(flag, "-r") == 0) {
+            monitor_process(pid);
+        }
+        else {
+            monitorar_namespaces(pid);
+        }
+    }
+    else if (strcmp(flag, "-c") == 0) {
+
+        if (argc != 4) {
+            fprintf(stderr, "Erro: A flag -c exige exatamente 2 PIDs\n");
+            return 1;
+        }
+
+        int pid1 = atoi(argv[2]);
+        int pid2 = atoi(argv[3]);
+
+        if (pid1 <= 0 || pid2 <= 0) {
+            fprintf(stderr, "PIDs inválidos: %s e %s\n", argv[2], argv[3]);
+            return 1;
+        }
+
+        comparar_namespaces(pid1, pid2);
+    }
+    else if (strcmp(flag, "-m") == 0) {
+
+        if (argc != 2) {
+            fprintf(stderr, "Erro: A Flag -m não exige PIDs\n");
+            return 1;
+        }
+        mapear_todos_processos();
+    }
+    else if (strcmp(flag, "-o") == 0) {
+        if (argc != 3) {
+            fprintf(stderr, "Erro: A flag -o exige numero de iteracoes\n");
+            fprintf(stderr, "Uso: %s -o <ITERACOES>\n", argv[0]);
+            return 1;
+        }
+
+        long iteracao = atol(argv[2]);
+
+        if (iteracao <= 0) {
+            fprintf(stderr, "Numero de iteracoes invalido: %s\n", argv[2]);
+            return 1;
+        }
+
+        namespace_overhead(iteracao);
+    }
+    else if (strcmp(flag, "-g") == 0) {
+        if (argc < 3) {
+            ajuda_cgroup();
+            return 1;
+        }
+
+        char* subcomando = argv[2];
+
+        if (strcmp(subcomando, "metrics") == 0) {
+            if (argc == 4) {
+                coletar_metricas_cgroup(argv[3]);
+            }
+            else {
+                printf("Erro: Uso: -g metrics <cgroup_path>\n");
+                ajuda_cgroup();
+                return 1;
+            }
+        }
+        else if (strcmp(subcomando, "create") == 0) {
+            if (argc == 7) {
+                double cpu = atof(argv[5]);
+                long mem = atol(argv[6]);
+                criar_configurar_cgroup(argv[3], argv[4], cpu, mem);
+            }
+            else {
+                printf("Erro: Uso: -g create <controller> <nome> <cpu> <mem>\n");
+                ajuda_cgroup();
+                return 1;
+            }
+        }
+        else if (strcmp(subcomando, "throttle") == 0) {
+            conduzir_experimentos_throttling();
+        }
+        else if (strcmp(subcomando, "memlimit") == 0) {
+            experimento_limite_memoria();
+        }
+        else if (strcmp(subcomando, "report") == 0) {
+            if (argc == 4) {
+                gerar_relatorio_utilizacao(argv[3]);
+            }
+            else {
+                printf("Erro: Uso: -g report <cgroup_path>\n");
+                ajuda_cgroup();
+                return 1;
+            }
+        }
+        else {
+            ajuda_cgroup();
+            return 1;
+        }
+    }
+
+    return 0;
 }
