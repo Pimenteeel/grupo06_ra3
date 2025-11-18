@@ -44,7 +44,8 @@ void monitor_process(int pid) {
     while (1) {
 
         system("clear");//Limpa a tela a cada ciclo
-        //Pesquisar******************************
+
+		//caso leitura falhe, informa e sai
         if (metricas_CPU(pid, &dados_CPU) != 0) {
             fprintf(stderr, "Não foi possível ler metricas de CPU para o PID %d\n", pid);
             return;
@@ -161,14 +162,17 @@ void monitor_process(int pid) {
     printf("\nMonitoramento encerrado. Log salvo em Resource_Monitor.csv\n");
 }
 
+//Função para obter e mostrar namespaces de um PID
 void monitorar_namespaces(int pid) {
 
     ProcessNamespaces ns;
-
+    
+	//Tenta obter namespaces, se erro informa
     if (namespaces_por_pid(pid, &ns) != 0) {
         fprintf(stderr, "Não foi possível ler namespaces para o PID %d", pid);
         return;
     }
+	//Imprime os namespaces
     printf("Listando Namespaces para o PID: %d\n", pid);
     printf("TIPO     | ID (INODE)\n");
     printf("---------------------------\n");
@@ -183,6 +187,7 @@ void monitorar_namespaces(int pid) {
 
 }
 
+// Executa operações de ponto flutuante em loop para ocupar a CPU durante testes.
 static void executar_workload_cpu(int iteracoes) {
     volatile double resultado = 0.0;
     for (int i = 0; i < iteracoes; i++) {
@@ -190,6 +195,7 @@ static void executar_workload_cpu(int iteracoes) {
     }
 }
 
+//Opções para ajudar os comando do Cgroup
 void ajuda_cgroup() {
     printf("\nUso das funções CGroup:\n");
     printf(" -g metrics <cgroup_path>                 Coletar metricas de cgroup\n");
@@ -199,6 +205,7 @@ void ajuda_cgroup() {
     printf(" -g report <cgroup_path>                  Gerar relatorio de utilizacao\n");
 }
 
+//Executa experimentos variando limites de CPU
 void conduzir_experimentos_throttling(void) {
     printf("EXPERIMENTO 3: THROTTLING DE CPU\n");
     printf("=================================\n\n");
@@ -209,11 +216,13 @@ void conduzir_experimentos_throttling(void) {
     printf("LIMITE (cores) | CPU%% MEDIDO | THROUGHPUT (iter/s) | DESVIO%%\n");
     printf("---------------------------------------------------------------\n");
 
+    // Para cada limite definido, cria cgroup, executa workload e coleta métricas
     for (int i = 0; i < num_limites; i++) {
         double limite = limites[i];
         char cgroup_name[64];
         snprintf(cgroup_name, sizeof(cgroup_name), "throttle_%.2f", limite);
 
+        // Cria e configura o cgroup para o limite de CPU atual
         if (!criar_configurar_cgroup("cpu", cgroup_name, limite, 0)) {
             continue;
         }
@@ -224,7 +233,7 @@ void conduzir_experimentos_throttling(void) {
             fprintf(stderr, "Caminho do cgroup muito longo\n");
             continue;
         }
-
+        // Caminho para extração direta das estatísticas de CPU
         char metric_path[MAX_PATH];
         written = snprintf(metric_path, sizeof(metric_path), "%s/cpu.stat", cgroup_path);
         if (written >= (int)sizeof(metric_path)) {
@@ -233,6 +242,7 @@ void conduzir_experimentos_throttling(void) {
         }
 
         unsigned long long uso_cpu_antes = 0;
+		//Le o valor de uso de CPU antes da execução
         FILE* cpu_file = fopen(metric_path, "r");
         if (cpu_file) {
             char line[256];
@@ -245,22 +255,26 @@ void conduzir_experimentos_throttling(void) {
             fclose(cpu_file);
         }
 
+        // Move o processo atual para dentro do cgroup de teste
+
         if (!move_process_to_cgroup(cgroup_path, getpid())) {
             continue;
         }
 
+        // Marca tempo inicial antes do workload
         struct timespec inicio, fim;
         clock_gettime(CLOCK_MONOTONIC, &inicio);
 
-        int iteracoes = 50000000;
-        executar_workload_cpu(iteracoes);
+        int iteracoes = 50000000; //Quantidade fixa para bench  
+		executar_workload_cpu(iteracoes); //Executa workload pesado de CPU
 
-        clock_gettime(CLOCK_MONOTONIC, &fim);
+        clock_gettime(CLOCK_MONOTONIC, &fim); // Marca tempo final
 
         double tempo_decorrido_ns = (fim.tv_sec - inicio.tv_sec) * 1e9 + (fim.tv_nsec - inicio.tv_nsec);
         double tempo_decorrido_s = tempo_decorrido_ns / 1e9;
 
         unsigned long long uso_cpu_depois = 0;
+        // Lê novamente estatística de uso de CPU do cgroup após workload
         cpu_file = fopen(metric_path, "r");
         if (cpu_file) {
             char line[256];
@@ -273,16 +287,22 @@ void conduzir_experimentos_throttling(void) {
             fclose(cpu_file);
         }
 
+        //Diferença do uso efetivo de CPU (em nanossegundos)
         unsigned long long delta_cpu_ns = uso_cpu_depois - uso_cpu_antes;
+
+        // Porcentagem de CPU efetiva utilizada pelo workload no cgroup
         double cpu_percent = (delta_cpu_ns / tempo_decorrido_ns) * 100.0;
 
+        // Throughput = quantas iterações por segundo
         double throughput = iteracoes / tempo_decorrido_s;
 
+        // Desvio percentual em relação ao valor esperado pelo limite de cgroup
         double desvio_percentual = ((cpu_percent - (limite * 100)) / (limite * 100)) * 100;
 
         printf("%.2f           | %-10.1f  | %-18.0f  | %-7.1f\n",
             limite, cpu_percent, throughput, desvio_percentual);
 
+        // Remove processo deste cgroup antes de deletá-lo
         char procs_path[MAX_PATH];
         written = snprintf(procs_path, sizeof(procs_path), "%s/cgroup.procs", cgroup_path);
         if (written < (int)sizeof(procs_path)) {
@@ -290,7 +310,7 @@ void conduzir_experimentos_throttling(void) {
         }
 
         sleep(1);
-        rmdir(cgroup_path);
+		rmdir(cgroup_path); //Remove o cgroup após o teste
 
         if (i < num_limites - 1) sleep(1);
     }
@@ -299,6 +319,7 @@ void conduzir_experimentos_throttling(void) {
     printf("Experimento de throttling concluido\n");
 }
 
+// Realiza teste de limitação de alocação de memória utilizando cgroup
 void experimento_limite_memoria(void) {
     printf("\nEXPERIMENTO 4: LIMITACAO DE MEMORIA\n");
     printf("==================================\n");
@@ -308,6 +329,7 @@ void experimento_limite_memoria(void) {
     printf("2. Tentar alocar memoria incrementalmente\n");
     printf("3. Observar comportamento (OOM killer, falhas de alocacao)\n\n");
 
+	//Cria e configura cgroup de memória, 100MB
     if (!criar_configurar_cgroup("memory", "exp_memoria", 0, 100)) {
         return;
     }
@@ -318,7 +340,7 @@ void experimento_limite_memoria(void) {
         fprintf(stderr, "Caminho do cgroup memoria muito longo\n");
         return;
     }
-
+    // Move este processo para dentro do cgroup limitado em memória
     if (!move_process_to_cgroup(cgroup_path, getpid())) {
         return;
     }
@@ -327,12 +349,14 @@ void experimento_limite_memoria(void) {
     printf("Tentativa | Tamanho (MB) | Status\n");
     printf("-----------------------------------\n");
 
+	//Tamanhos de alocação em MB
     size_t tamanhos_mb[] = { 10, 25, 50, 75, 100, 110, 120 };
     int num_testes = sizeof(tamanhos_mb) / sizeof(tamanhos_mb[0]);
 
-    size_t max_alocado = 0;
-    int falhas = 0;
+	size_t max_alocado = 0; //Maior bloco alocado com sucesso
+    int falhas = 0;         //Numero de falhas
 
+    // Tenta alocar blocos de acordo com o vetor acima
     for (int i = 0; i < num_testes; i++) {
         size_t tamanho_mb = tamanhos_mb[i];
         size_t tamanho_bytes = tamanho_mb * 1024 * 1024;
@@ -352,6 +376,7 @@ void experimento_limite_memoria(void) {
             break;
         }
 
+        //Lê o uso atual de memória do cgroup para exibir
         char metric_path[MAX_PATH];
         written = snprintf(metric_path, sizeof(metric_path), "%s/memory.current", cgroup_path);
         if (written < (int)sizeof(metric_path)) {
@@ -363,6 +388,7 @@ void experimento_limite_memoria(void) {
         sleep(1);
     }
 
+    // Após alocação, lê eventos de falhas de alocação do cgroup
     char metric_path[MAX_PATH];
     int written_failcnt = snprintf(metric_path, sizeof(metric_path), "%s/memory.events", cgroup_path);
     long failcnt = 0;
@@ -370,6 +396,7 @@ void experimento_limite_memoria(void) {
         failcnt = read_from_file_long(metric_path);
     }
 
+    // Exibe resumo dos resultados finais do experimento
     printf("\nRESULTADOS FINAIS:\n");
     printf("----------------------------------------\n");
     printf("Quantidade maxima alocada: %zu MB\n", max_alocado);
@@ -379,15 +406,16 @@ void experimento_limite_memoria(void) {
         falhas > 0 ? "Falha de alocacao ao atingir limite" : "Todas alocacoes bem-sucedidas");
     printf("----------------------------------------\n");
 
+    // Remove processo do cgroup e exclui o cgroup criado
     char procs_path[MAX_PATH];
     written = snprintf(procs_path, sizeof(procs_path), "%s/cgroup.procs", cgroup_path);
     if (written < (int)sizeof(procs_path)) {
-        write_to_file(procs_path, "0");
+        write_to_file(procs_path, "0"); // Remove processo do cgroup
     }
     sleep(1);
-    rmdir(cgroup_path);
+    rmdir(cgroup_path); // Remove diretório do cgroup
 }
-
+// Função principal: interpreta a linha de comando e chama as funções apropriadas
 int main(int argc, char* argv[]) {
     if (argc < 2) {
         fprintf(stderr, "Uso: %s <flag> <PID> [PID]\n", argv[0]);
@@ -401,8 +429,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    char* flag = argv[1];
+    char* flag = argv[1]; // Captura flag principal do usuário
 
+    // Caso para monitoramento de recursos ou namespaces por PID
     if (strcmp(flag, "-r") == 0 || strcmp(flag, "-n") == 0) {
 
         if (argc != 3) {
@@ -417,12 +446,13 @@ int main(int argc, char* argv[]) {
         }
 
         if (strcmp(flag, "-r") == 0) {
-            monitor_process(pid);
+            monitor_process(pid); // Abre monitoramento completo do processo
         }
         else {
-            monitorar_namespaces(pid);
+            monitorar_namespaces(pid); // Apenas exibe namespaces do processo
         }
     }
+    // Para comparar namespaces de dois processos
     else if (strcmp(flag, "-c") == 0) {
 
         if (argc != 4) {
@@ -438,16 +468,18 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        comparar_namespaces(pid1, pid2);
+        comparar_namespaces(pid1, pid2);// Chama comparação entre processos
     }
+    // Para mapear todos os processos do sistema
     else if (strcmp(flag, "-m") == 0) {
 
         if (argc != 2) {
             fprintf(stderr, "Erro: A Flag -m não exige PIDs\n");
             return 1;
         }
-        mapear_todos_processos();
+        mapear_todos_processos(); // Faz mapeamento de todos processos
     }
+    // Para medir overhead de namespaces por número de iterações
     else if (strcmp(flag, "-o") == 0) {
         if (argc != 3) {
             fprintf(stderr, "Erro: A flag -o exige numero de iteracoes\n");
@@ -457,16 +489,17 @@ int main(int argc, char* argv[]) {
 
         long iteracao = atol(argv[2]);
 
-        if (iteracao <= 0) {
+        if (iteracao <= 0) { // Executa experimento de overhead
             fprintf(stderr, "Numero de iteracoes invalido: %s\n", argv[2]);
             return 1;
         }
 
         namespace_overhead(iteracao);
     }
+    // Comandos relacionados a cgroup
     else if (strcmp(flag, "-g") == 0) {
         if (argc < 3) {
-            ajuda_cgroup();
+            ajuda_cgroup(); // Exibe menu de ajuda se faltarem argumentos
             return 1;
         }
 
@@ -474,7 +507,7 @@ int main(int argc, char* argv[]) {
 
         if (strcmp(subcomando, "metrics") == 0) {
             if (argc == 4) {
-                coletar_metricas_cgroup(argv[3]);
+                coletar_metricas_cgroup(argv[3]); // Coleta métricas de cgroup passado
             }
             else {
                 printf("Erro: Uso: -g metrics <cgroup_path>\n");
@@ -495,18 +528,18 @@ int main(int argc, char* argv[]) {
             }
         }
         else if (strcmp(subcomando, "throttle") == 0) {
-            conduzir_experimentos_throttling();
+            conduzir_experimentos_throttling(); // Executa experimento de throttling de CPU
         }
         else if (strcmp(subcomando, "memlimit") == 0) {
-            experimento_limite_memoria();
+            experimento_limite_memoria(); // Executa experimento de limite de memória
         }
         else if (strcmp(subcomando, "report") == 0) {
             if (argc == 4) {
-                gerar_relatorio_utilizacao(argv[3]);
+                gerar_relatorio_utilizacao(argv[3]); // Gera relatório do cgroup indicado
             }
             else {
                 printf("Erro: Uso: -g report <cgroup_path>\n");
-                ajuda_cgroup();
+                ajuda_cgroup(); // Default: exibe ajuda se comando desconhecido
                 return 1;
             }
         }
