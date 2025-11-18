@@ -1,17 +1,14 @@
-REDE_MONITOR.C
-
-
-//bibliotecas utilizadas para manipulação de arquivos, strings e entrada e saida
+//bibliotecas utilizadas para manipulaï¿½ï¿½o de arquivos, strings e entrada e saida
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "monitor.h"// aqui temos a definição da struct RedeMetrics e funções auxiliares de monitoramento de rede
+#include "monitor.h"// aqui temos a definiï¿½ï¿½o da struct RedeMetrics e funï¿½ï¿½es auxiliares de monitoramento de rede
 
 
-// função recebe um PID e um ponteiro para a struct RedeMetrics utilizada para preenchimento de dados de uso de rede lidos do sistema
-// função inicia montando caminho do arquivo /proc/<PID>/net/dev que armazena estatisticas de uso de rede associadas ao PID
+// funï¿½ï¿½o recebe um PID e um ponteiro para a struct RedeMetrics utilizada para preenchimento de dados de uso de rede lidos do sistema
+// funï¿½ï¿½o inicia montando caminho do arquivo /proc/<PID>/net/dev que armazena estatisticas de uso de rede associadas ao PID
 // abre o arquivo para ler, caso ocorra falha, retorna -1
-// inicializa buffer auxiliar para leitura do arquivo e ponteiro auxiliar para manipulação de strings
+// inicializa buffer auxiliar para leitura do arquivo e ponteiro auxiliar para manipulaï¿½ï¿½o de strings
 // zera todos os campos da struct, garantindo que os dados ''lixo'' sejam devidamente ''descartados''
 int metricas_REDE(int pid, RedeMetrics* red) {
     char proc_path[256];
@@ -33,12 +30,12 @@ int metricas_REDE(int pid, RedeMetrics* red) {
     red->packets_tx = 0;
 
 
-    // O loop é responsavel por ler o arquivo e procurar a entrada referente a interface de rede "eth0",
-    // quando a encontra, processa os valores separados por espaços, utilizando strtok para dividir os campos,
+    // O loop ï¿½ responsavel por ler o arquivo e procurar a entrada referente a interface de rede "eth0",
+    // quando a encontra, processa os valores separados por espaï¿½os, utilizando strtok para dividir os campos,
     // extrai os principais dados, bytes recebidos (bytes_rx), pacotes recebidos (packets_rx), bytes transmitidos(bytes_tx) e...
-    //... pacotes transmitidos (packtes_rx), esses dados sao extraídos conforme a ordem do arquivo
+    //... pacotes transmitidos (packtes_rx), esses dados sao extraï¿½dos conforme a ordem do arquivo
     // campos intermediarios sao ignorados por meio de lacos ou chamadas de strtok
-    // após os processamentos o loop é encerrado para evitar leituras desnecessarias
+    // apï¿½s os processamentos o loop ï¿½ encerrado para evitar leituras desnecessarias
     // toda logica depende da estrutura da linha "eth0" e da ordem especifica dos campos estatisticos do kernel Linux
     while (fgets(buffer, sizeof(buffer), fp) != NULL) {
         if (strstr(buffer, "eth0") != NULL) {
