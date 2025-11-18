@@ -1,4 +1,4 @@
-NAMESPACE_ANALYZER
+
 
 
 #define _GNU_SOURCE //uso de recursos e funções específicas do LINUX
